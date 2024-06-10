@@ -1,0 +1,81 @@
+# Options for analysis running.
+run:
+  # Timeout for analysis, e.g. 30s, 5m.
+  # Default: 1m
+  timeout: 5m
+
+linters:
+  # Enable additional linters
+  enable:
+    - varnamelen # Checks that the length of a variable's name matches its scope.
+    - errname # Checks that sentinel errors are prefixed with the Err and error types are suffixed with the Error.
+    - exportloopref # Checks for pointers to enclosing loop variables.
+    - gochecknoglobals # Check that no global variables exist
+    - goerr113 # Go linter to check the errors handling expressions.
+  #  - ireturn # Accept Interfaces, Return Concrete Types. TODO: this linter is not working properly with generics
+    - revive # Fast, configurable, extensible, flexible, and beautiful linter for Go. Drop-in replacement of golint.
+    - goconst # Finds repeated strings that could be replaced by a constant.
+    - errorlint # Errorlint is a linter for that can be used to find code that will cause problems with the error wrapping scheme introduced in Go 1.13.
+    - exhaustive # Check exhaustiveness of enum switch statements.
+    - exportloopref # Checks for pointers to enclosing loop variables.
+    - forbidigo # Forbids identifiers, like forgotten fmt.Println, spew.Dump, etc.
+    - godot # Check if comments end in a period.
+    - goimports # Check import statements are formatted according to the 'goimport' command.
+    - mirror # Reports wrong mirror patterns of bytes/strings usage.
+    - nolintlint # Reports ill-formed or insufficient nolint directives.
+    - testifylint # Checks usage of github.com/stretchr/testify.
+    - copyloopvar # Reports if some loop variables are copied (using loop variables is fixed in Go 1.22+, linter is safe for older Go versions).
+    - gofumpt # Checks whether the code was gofumpt-ed.
+
+linters-settings:
+  varnamelen:
+    # The longest distance, in source lines, that is being considered a "small scope".
+    # Variables used in at most this many lines will be ignored.
+    # Default: 5
+    max-distance: 7
+    # Optional list of variable names that should be ignored completely.
+    # Default: []
+    ignore-names:
+      - err
+      - tx
+      - id
+      - ok
+      - tt
+    # Optional list of variable declarations that should be ignored completely.
+    # Entries must be in one of the following forms (see below for examples):
+    # - for variables, parameters, named return values, method receivers, or type parameters:
+    #   <name> <type>  (<type> can also be a pointer/slice/map/chan/...)
+    # - for constants: const <name>
+    #
+    # Default: []
+    ignore-decls:
+      - t testing.T
+      - t testing.TB
+      - e error
+      - i int
+      - ix int
+      - wg sync.WaitGroup
+      - eg errgroup.Group
+      - eg *errgroup.Group
+  revive:
+    severity: error
+    ignore-generated-header: true # ignores files with "GENERATED" header
+    rules:
+    - name: exported # Exported function and methods should have comments
+      disabled: false
+      arguments:
+        - "checkPrivateReceivers" # enables checking public methods of private types
+
+issues:
+  # Fix found issues (if it's supported by the linter).
+  fix: false
+  # Excluding configuration per-path, per-linter, per-text and per-source
+  exclude-rules:
+    # Exclude some linters from running on tests files.
+    - path: _test\.go
+      linters:
+        - errcheck
+        - goerr113
+        - godot
+  include:
+    - EXC0012 # include back that exported stuff should have comment
