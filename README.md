@@ -1,3 +1,7 @@
+[![Go Reference](https://pkg.go.dev/badge/github.com/dmksnnk/rheos.svg)](https://pkg.go.dev/github.com/dmksnnk/rheos)
+![GitHub tag (with filter)](https://img.shields.io/github/v/tag/dmksnnk/rheos)
+![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/dmksnnk/rheos/go.yml)
+
 # rheos
 
 rheos (from Greek "rheos," meaning a stream or current) provides building blocks for asynchronous stream processing. It offers:
@@ -11,7 +15,6 @@ Only Go 1.18+ is supported.
 
 ```bash
 go get -u gitlab.heu.group/dmknnk/rheos
-
 ````
 
 ## Usage
@@ -32,7 +35,6 @@ got, err := rheos.Reduce(
 )
 fmt.Println(got, err)
 // Output: 12345 <nil> 
-
 ```
 
 Fetching URL asynchronously:
