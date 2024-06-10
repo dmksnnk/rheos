@@ -11,8 +11,7 @@ linters:
     - errname # Checks that sentinel errors are prefixed with the Err and error types are suffixed with the Error.
     - exportloopref # Checks for pointers to enclosing loop variables.
     - gochecknoglobals # Check that no global variables exist
-    - goerr113 # Go linter to check the errors handling expressions.
-  #  - ireturn # Accept Interfaces, Return Concrete Types. TODO: this linter is not working properly with generics
+    - err113 # Go linter to check the errors handling expressions.
     - revive # Fast, configurable, extensible, flexible, and beautiful linter for Go. Drop-in replacement of golint.
     - goconst # Finds repeated strings that could be replaced by a constant.
     - errorlint # Errorlint is a linter for that can be used to find code that will cause problems with the error wrapping scheme introduced in Go 1.13.
@@ -75,7 +74,7 @@ issues:
     - path: _test\.go
       linters:
         - errcheck
-        - goerr113
+        - err113
         - godot
   include:
     - EXC0012 # include back that exported stuff should have comment
