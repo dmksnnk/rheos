@@ -3,6 +3,7 @@ package rheos
 
 import (
 	"context"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -172,6 +173,61 @@ func Batch[I any](pipe Stream[I], size int, ops ...Option[[]I]) Stream[[]I] {
 					return err
 				}
 
+				batch = make([]I, 0, size)
+			}
+		}
+
+		if len(batch) > 0 {
+			return push(pipe.ctx, output, batch)
+		}
+
+		return nil
+	})
+
+	return Stream[[]I]{
+		in:  output,
+		eg:  pipe.eg,
+		ctx: pipe.ctx,
+	}
+}
+
+// BatchTimeout converts a steam of elements into a steam of slices of elements.
+// It collects elements into slice until it reaches maximum size or until timeout occurs, and sends them as a batch.
+// If context is cancelled during processing, BatchTimeout stops processing and returns error.
+func BatchTimeout[I any](pipe Stream[I], size int, timeout time.Duration, ops ...Option[[]I]) Stream[[]I] {
+	output := make(chan []I)
+	for _, op := range ops {
+		output = op()
+	}
+	ticker := time.NewTicker(timeout)
+
+	pipe.eg.Go(func() error {
+		defer close(output)
+		defer ticker.Stop()
+
+		batch := make([]I, 0, size)
+	loop:
+		for {
+			select {
+			case d, ok := <-pipe.in:
+				if !ok {
+					break loop
+				}
+
+				batch = append(batch, d)
+				if len(batch) == size {
+					if err := push(pipe.ctx, output, batch); err != nil {
+						return err
+					}
+					batch = make([]I, 0, size)
+				}
+			case <-ticker.C:
+				if len(batch) == 0 {
+					continue
+				}
+				if err := push(pipe.ctx, output, batch); err != nil {
+					return err
+				}
 				batch = make([]I, 0, size)
 			}
 		}
