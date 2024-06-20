@@ -10,6 +10,14 @@ It provides building blocks for asynchronous stream processing:
 - Cancellation of stream processing on context cancellation or error.
 - Functional goodies: mapping, filtering, reducing, batching and collecting of stream elements.
 
+In its core, it is [pipeline pattern](https://go.dev/blog/pipelines) with [lo](https://github.com/samber/lo) and generics.
+
+## Use cases
+
+- API Requests: do N parallel requests and push the data for further processing.
+- DB Queries: fetch data from database in one goroutine and process results in another.
+- Batch Event Processing: Handle events in batches, e.g., from RabbitMQ.
+
 ## Installation
 
 Only Go 1.18+ is supported.
