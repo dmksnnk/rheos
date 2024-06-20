@@ -4,9 +4,10 @@
 
 # rheos
 
-rheos (from Greek "rheos," meaning a stream or current) provides building blocks for asynchronous stream processing. It offers:
+rheos (from Greek "rheos," meaning a stream or current) is like [lo](https://github.com/samber/lo), but async. 
+It provides building blocks for asynchronous stream processing:
 
-- Cancellation of stream processing on context cancellation or error
+- Cancellation of stream processing on context cancellation or error.
 - Functional goodies: mapping, filtering, reducing, batching and collecting of stream elements.
 
 ## Installation
