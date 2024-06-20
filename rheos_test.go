@@ -246,6 +246,52 @@ func TestUnitBuffered(t *testing.T) {
 	assertSlicesEqual(t, wantResult, result)
 }
 
+func TestUnitFromChannel(t *testing.T) {
+	t.Run("collect items", func(t *testing.T) {
+		num := int(rand.Int31n(100) + 10)
+		input := make(chan int, num)
+		go func() {
+			defer close(input)
+			for i := 0; i < num; i++ {
+				input <- i
+			}
+		}()
+
+		p := rheos.FromChannel(context.Background(), input)
+		got, err := rheos.Collect(p)
+
+		want := intRange(num)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		assertSlicesEqual(t, want, got)
+	})
+
+	t.Run("context cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		num := int(rand.Int31n(100) + 10)
+		input := make(chan int, num)
+		go func() {
+			defer close(input)
+			for i := 0; i < num; i++ {
+				if i >= num/2 {
+					cancel()
+					return
+				}
+
+				input <- i
+			}
+		}()
+
+		p := rheos.FromChannel(ctx, input)
+		_, err := rheos.Collect(p)
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("unexpected error: %v, want: %v", err, context.Canceled)
+		}
+	})
+}
+
 func newProducer(ctx context.Context, num int) rheos.Stream[int] {
 	return rheos.FromIter(ctx, func(yield func(v int) bool) error {
 		for i := 0; i < num; i++ {
