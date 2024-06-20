@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/dmksnnk/rheos"
 )
@@ -44,4 +45,16 @@ func ExampleFilter() {
 	got, err := rheos.Collect(strings)
 	fmt.Println(got, err)
 	// Output: [2 4] <nil>
+}
+
+func ExampleBatchTimeout() {
+	producer := rheos.FromSlice(context.Background(), []int{1, 2, 3, 4, 5})
+	workSimulation := rheos.Map(producer, func(_ context.Context, v int) (int, error) {
+		time.Sleep(2 * time.Millisecond) // simulate work which is longer than the batch timeout
+		return v, nil
+	})
+	batch := rheos.BatchTimeout(workSimulation, 2, time.Millisecond)
+	got, err := rheos.Collect(batch)
+	fmt.Println(got, err) // instead of batches of 2, we get batches of 1 because the work takes longer than the batch timeout
+	// Output: [[1] [2] [3] [4] [5]] <nil>
 }
