@@ -71,6 +71,34 @@ func FromSlice[I any](ctx context.Context, slice []I, ops ...Option[I]) Stream[I
 	return FromIter[I](ctx, seq, ops...)
 }
 
+// FromChannel creates a new Stream from a channel.
+// If context is cancelled during processing, Stream stops processing and returns error.
+func FromChannel[I any](ctx context.Context, input <-chan I, ops ...Option[I]) Stream[I] {
+	results := make(chan I)
+	for _, op := range ops {
+		results = op()
+	}
+
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		defer close(results)
+
+		for elem := range input {
+			if err := push(ctx, results, elem); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	return Stream[I]{
+		in:  results,
+		eg:  eg,
+		ctx: ctx,
+	}
+}
+
 // Map transforms Stream into a Stream of another type.
 // If error occurs or context is cancelled during processing, Map stops processing and returns error.
 func Map[I any, O any](pipe Stream[I], mapper func(context.Context, I) (O, error), ops ...Option[O]) Stream[O] {
