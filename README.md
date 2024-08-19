@@ -7,8 +7,9 @@
 rheos (from Greek "rheos," meaning a stream or current) is like [lo](https://github.com/samber/lo), but async. 
 It provides building blocks for asynchronous stream processing:
 
-- Cancellation of stream processing on context cancellation or error.
 - Functional goodies: mapping, filtering, reducing, batching and collecting of stream elements.
+- Parallel processing with `ParXXX` (`ParMap`, `ParFilter`, etc.) functions.
+- Cancellation of stream processing on context cancellation or error.
 
 In its core, it is [pipeline pattern](https://go.dev/blog/pipelines) with [lo](https://github.com/samber/lo) and generics.
 
@@ -26,9 +27,79 @@ Only Go 1.18+ is supported.
 go get -u gitlab.heu.group/dmknnk/rheos
 ````
 
+## How it works
+
+Each "step" runs in a separate goroutine, making each step running asynchronously.
+
+<details>
+  <summary>Click here for detailed explanation!</summary>
+
+Let's say we have tasks `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]` that we want to process in 2 steps, each taking 1 second to complete.
+With synchronous processing, it will take 10 * 2 * 1s = 20 seconds. With asynchronous processing, it will take around 11 seconds.
+
+
+```go
+start := time.Now()
+// our tasks
+tasks := rheos.FromSlice(context.Background(), []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+step1 := rheos.Map(tasks, func(_ context.Context, v int) (int, error) {
+    time.Sleep(1 * time.Second) // simulate work
+    return v, nil
+})
+step2 := rheos.Map(step1, func(_ context.Context, v int) (int, error) {
+    time.Sleep(1 * time.Second) // simulate work
+    return v, nil
+})
+result, err := rheos.Collect(step2)
+fmt.Println(result, err)
+fmt.Printf("elapsed time: %s\n", time.Since(start).Round(time.Second))
+// Output: [1 2 3 4 5 6 7 8 9 10] <nil>
+// elapsed time: 11s
+```
+[Full example](https://play.golang.com/p/CphQm2urcVp).
+
+This is how processing will look like:
+
+![Processing Steps](.assets/processing.png)
+
+Each step processes one task and passes the result to the next one.
+
+However, if the order of the items is not important to us, we can process the tasks in parallel, cutting the processing time in half. Let's use parallel steps with 2 workers:
+
+
+```go
+start := time.Now()
+// our tasks
+tasks := rheos.FromSlice(context.Background(), []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+// parallel mapping with 2 workers
+step1 := rheos.ParMap(tasks, 2, func(_ context.Context, v int) (int, error) {
+    time.Sleep(1 * time.Second) // simulate work
+    return v, nil
+})
+step2 := rheos.ParMap(step1, 2, func(_ context.Context, v int) (int, error) {
+    time.Sleep(1 * time.Second) // simulate work
+    return v, nil
+})
+result, err := rheos.Collect(step2)
+fmt.Println(result, err)
+fmt.Printf("elapsed time: %s\n", time.Since(start).Round(time.Second))
+// Output: [2,1,3,4,6,5,7,8,10,9] <nil>
+// elapsed time: 6s
+```
+[Full example](https://play.golang.com/p/mNZO7NT4LiF).
+
+This is how parallel processing will look:
+
+![Processing Steps](.assets/parallel-processing.png)
+
+Each steps has 2 workers, which means each step will process 2 tasks at the same time. The order of the output is undefined, because tasks are passed via channels: the first finished task got passed to the next step as soon as it is finished.
+
+</details>
+
 ## Usage
 
-A simple example of showing how to map a stream of integers to strings and squish them together:
+
+A simple example showing how to map a stream of integers to strings and join them together:
 
 ```go
 producer := rheos.FromSlice(context.Background(), []int{1, 2, 3, 4, 5})
@@ -71,6 +142,30 @@ if err != nil {
     log.Fatal(err)
 }
 ````
+
+Processing in parallel with workers:
+
+```go
+start := time.Now()
+tasks := rheos.FromSlice(context.Background(), []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+// parallel mapping with 2 workers
+step1 := rheos.ParMap(tasks, 2, func(_ context.Context, v int) (int, error) {
+    time.Sleep(1 * time.Second) // simulate work
+    return v, nil
+})
+step2 := rheos.ParMap(step1, 2, func(_ context.Context, v int) (int, error) {
+    time.Sleep(1 * time.Second) // simulate work
+    return v, nil
+})
+result, err := rheos.Collect(step2)
+fmt.Println(result, err)
+fmt.Printf("elapsed time: %s\n", time.Since(start).Round(time.Second))
+// Output: [2 1 3 4 6 5 7 8 9 10] <nil>
+// elapsed time: 6s
+```
+
+### Cancellation
+
 Pipeline cancellation when context is cancelled:
 
 ```go
