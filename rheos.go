@@ -15,16 +15,15 @@ type Stream[I any] struct {
 	ctx context.Context
 }
 
-// Seq is an iterator over sequences of individual values.
-// When called as seq(ctx, yield), seq calls yield(v) for each value v in the sequence,
+// Iter is an iterator over sequences of individual values.
+// When called as iter(yield), iter calls yield(v) for each value v in the sequence,
 // stopping early if yield returns false (works as break) or error occurred.
-// Based on https://go.dev/wiki/RangefuncExperiment.
-type Seq[T any] func(yield func(T) bool) error
+type Iter[T any] func(yield func(T) bool) error
 
 // FromIter creates a new Stream from a Seq.
 // If seq returns error or context is cancelled during processing,
 // Stream stops processing and returns error.
-func FromIter[I any](ctx context.Context, seq Seq[I], ops ...Option[I]) Stream[I] {
+func FromIter[I any](ctx context.Context, iter Iter[I], ops ...Option[I]) Stream[I] {
 	results := make(chan I)
 	for _, op := range ops {
 		results = op()
@@ -40,7 +39,7 @@ func FromIter[I any](ctx context.Context, seq Seq[I], ops ...Option[I]) Stream[I
 			return err == nil
 		}
 
-		if err := seq(pushFn); err != nil {
+		if err := iter(pushFn); err != nil {
 			return err
 		}
 
@@ -55,8 +54,7 @@ func FromIter[I any](ctx context.Context, seq Seq[I], ops ...Option[I]) Stream[I
 }
 
 // FromSlice creates a new Stream from a slice.
-// If seq returns error or context is cancelled during processing,
-// Stream stops processing and returns error.
+// If context is cancelled during processing, Stream stops processing and returns error.
 func FromSlice[I any](ctx context.Context, slice []I, ops ...Option[I]) Stream[I] {
 	seq := func(yield func(I) bool) error {
 		for _, elem := range slice {
