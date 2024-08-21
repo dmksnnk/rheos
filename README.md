@@ -8,16 +8,25 @@ rheos (from Greek "rheos," meaning a stream or current) is like [lo](https://git
 It provides building blocks for asynchronous stream processing:
 
 - Functional goodies: mapping, filtering, reducing, batching and collecting of stream elements.
-- Parallel processing with `ParXXX` (`ParMap`, `ParFilter`, etc.) functions.
+- Parallel processing with `ParXXX` 
+    (
+        [`ParMap`](https://pkg.go.dev/github.com/dmksnnk/rheos#ParMap), 
+        [`ParFilter`](https://pkg.go.dev/github.com/dmksnnk/rheos#ParFilter), 
+        [`ParFilterMap`](https://pkg.go.dev/github.com/dmksnnk/rheos#ParFilterMap)
+    ) functions.
 - Cancellation of stream processing on context cancellation or error.
+- Support for Go 1.23 iterators: 
+    [`FromSeq`](https://pkg.go.dev/github.com/dmksnnk/rheos#FromSeq), [`FromSeq2`](https://pkg.go.dev/github.com/dmksnnk/rheos#FromSeq2), 
+    [`All`](https://pkg.go.dev/github.com/dmksnnk/rheos#).
+
 
 In its core, it is [pipeline pattern](https://go.dev/blog/pipelines) with [lo](https://github.com/samber/lo) and generics.
 
 ## Use cases
 
 - API Requests: do N parallel requests and push the data for further processing.
-- DB Queries: fetch data from database in one goroutine and process results in another.
-- Batch Event Processing: Handle events in batches, e.g., from RabbitMQ.
+- DB Queries: fetch data from database in one goroutine and process results in another, while executing next query in the first goroutine.
+- Batch Event Processing: Handle events in batches, e.g., from RabbitMQ, Kafka or Nats.
 
 ## Installation
 
@@ -30,6 +39,7 @@ go get -u gitlab.heu.group/dmknnk/rheos
 ## How it works
 
 Each "step" runs in a separate goroutine, making each step running asynchronously.
+Under the hood it is just [errgroup](https://golang.org/x/sync/errgroup) and a bunch of channels.
 
 <details>
   <summary>Click here for detailed explanation!</summary>
@@ -63,6 +73,7 @@ This is how processing will look like:
 ![Processing Steps](.assets/processing.png)
 
 Each step processes one task and passes the result to the next one.
+At the end we just collect the results - adding all arriving results into a slice.
 
 However, if the order of the items is not important to us, we can process the tasks in parallel, cutting the processing time in half. Let's use parallel steps with 2 workers:
 
@@ -192,4 +203,4 @@ fmt.Println(got, err)
 // Output: [] I'm an error
 ```
 
-For more examples see [examples](example_test.go).
+For more examples see [example](example_test.go) or fill free to explore [tests](rheos_test.go). For Go 1.23 examples, see [example_go123](example_go123_test.go) or [iter_test](iter_test.go).
