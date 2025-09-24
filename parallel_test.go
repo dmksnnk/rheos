@@ -70,7 +70,9 @@ func TestParallelPipeline(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 
-		slices.Sort(got)
+		sort.Slice(got, func(i, j int) bool {
+			return got[i] < got[j]
+		})
 		assertSlicesEqual(t, want, got)
 	})
 
@@ -171,7 +173,10 @@ func TestUnitParForEach(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		slices.Sort(result)
+		
+		sort.Slice(got, func(i, j int) bool {
+			return got[i] < got[j]
+		})
 		assertSlicesEqual(t, want, result)
 	})
 
