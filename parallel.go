@@ -80,3 +80,21 @@ func ParFilter[I any](pipe Stream[I], num int, callback func(context.Context, I)
 		ops...,
 	)
 }
+
+// ParForEach is like ForEach, but calls the callback concurrently with num goroutines.
+// It's better to use it with a buffered stream.
+func ParForEach[I any](pipe Stream[I], num int, callback func(context.Context, I) error) error {
+	for i := 0; i < num; i++ {
+		pipe.eg.Go(func() error {
+			for elem := range pipe.in {
+				if err := callback(pipe.ctx, elem); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+	}
+
+	return pipe.eg.Wait()
+}
