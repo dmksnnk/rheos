@@ -114,6 +114,7 @@ func TestUnitForEach(t *testing.T) {
 	t.Run("collect items", func(t *testing.T) {
 		num := int(rand.Int31n(100) + 10)
 		p := newProducer(context.Background(), num)
+		want := intRange(num)
 
 		var result []int
 		err := rheos.ForEach(
@@ -123,11 +124,10 @@ func TestUnitForEach(t *testing.T) {
 				return nil
 			},
 		)
-
-		want := intRange(num)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+
 		assertSlicesEqual(t, want, result)
 	})
 	t.Run("returns error", func(t *testing.T) {

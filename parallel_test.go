@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"slices"
 	"sort"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -39,7 +41,11 @@ func TestParallel(t *testing.T) {
 }
 
 func TestParallelPipeline(t *testing.T) {
-	testFn := func(producer rheos.Stream[int], mapFn func(context.Context, int) (int, error), filterMapFn func(context.Context, int) (int, bool, error)) ([]int, error) {
+	testFn := func(
+		producer rheos.Stream[int],
+		mapFn func(context.Context, int) (int, error),
+		filterMapFn func(context.Context, int) (int, bool, error),
+	) ([]int, error) {
 		size := rand.Intn(10) + 1
 		p2 := rheos.ParMap(producer, size, mapFn)
 		p3 := rheos.ParFilterMap(p2, size, filterMapFn)
@@ -64,9 +70,7 @@ func TestParallelPipeline(t *testing.T) {
 			t.Fatalf("unexpected error: %s", err)
 		}
 
-		sort.Slice(got, func(i, j int) bool {
-			return got[i] < got[j]
-		})
+		slices.Sort(got)
 		assertSlicesEqual(t, want, got)
 	})
 
@@ -138,6 +142,96 @@ func TestParallelPipeline(t *testing.T) {
 		_, err := testFn(newProducer(context.TODO(), num), errMapFn, noopFilterMapFn)
 		if !errors.Is(err, errTest) {
 			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestUnitParForEach(t *testing.T) {
+	t.Run("collect items", func(t *testing.T) {
+		num := int(rand.Int31n(100) + 10)
+		p := newProducer(context.Background(), num)
+		want := intRange(num)
+
+		concurrency := rand.Intn(10) + 1
+
+		var mux sync.Mutex // guard writing to result slice
+		var result []int
+		err := rheos.ParForEach(
+			p,
+			concurrency,
+			func(_ context.Context, v int) error {
+				mux.Lock()
+				defer mux.Unlock()
+
+				result = append(result, v)
+
+				return nil
+			},
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		slices.Sort(result)
+		assertSlicesEqual(t, want, result)
+	})
+
+	t.Run("returns error", func(t *testing.T) {
+		num := int(rand.Int31n(100) + 10)
+		p := newProducer(context.Background(), num)
+
+		concurrency := rand.Intn(10) + 1
+
+		var mux sync.Mutex // guard writing to result slice
+		var result []int
+		err := rheos.ParForEach(
+			p,
+			concurrency,
+			func(_ context.Context, v int) error {
+				mux.Lock()
+				defer mux.Unlock()
+
+				result = append(result, v)
+				if len(result) >= num/2 {
+					return errTest
+				}
+
+				return nil
+			},
+		)
+
+		if !errors.Is(err, errTest) {
+			t.Errorf("unexpected error: %v, want: %v", err, errTest)
+		}
+	})
+
+	t.Run("context is cancelled", func(t *testing.T) {
+		num := int(rand.Int31n(100) + 10)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		p := newProducer(ctx, num)
+
+		concurrency := rand.Intn(10) + 1
+
+		var mux sync.Mutex // guard writing to result slice
+		var result []int
+		err := rheos.ParForEach(
+			p,
+			concurrency,
+			func(_ context.Context, v int) error {
+				mux.Lock()
+				defer mux.Unlock()
+
+				result = append(result, v)
+				if len(result) >= num/2 {
+					cancel()
+				}
+
+				return nil
+			},
+		)
+
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("unexpected error: %v, want: %v", err, context.Canceled)
 		}
 	})
 }
