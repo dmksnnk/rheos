@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"math/rand"
-	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -173,9 +172,9 @@ func TestUnitParForEach(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		
-		sort.Slice(got, func(i, j int) bool {
-			return got[i] < got[j]
+
+		sort.Slice(result, func(i, j int) bool {
+			return result[i] < result[j]
 		})
 		assertSlicesEqual(t, want, result)
 	})
