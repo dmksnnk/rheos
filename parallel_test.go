@@ -150,7 +150,7 @@ func TestParallelPipeline(t *testing.T) {
 func TestUnitParForEach(t *testing.T) {
 	t.Run("collect items", func(t *testing.T) {
 		num := int(rand.Int31n(100) + 10)
-		p := newProducer(context.Background(), num)
+		producer := newProducer(context.Background(), num)
 		want := intRange(num)
 
 		concurrency := rand.Intn(10) + 1
@@ -158,7 +158,7 @@ func TestUnitParForEach(t *testing.T) {
 		var mux sync.Mutex // guard writing to result slice
 		var result []int
 		err := rheos.ParForEach(
-			p,
+			producer,
 			concurrency,
 			func(_ context.Context, v int) error {
 				mux.Lock()
@@ -181,14 +181,14 @@ func TestUnitParForEach(t *testing.T) {
 
 	t.Run("returns error", func(t *testing.T) {
 		num := int(rand.Int31n(100) + 10)
-		p := newProducer(context.Background(), num)
+		producer := newProducer(context.Background(), num)
 
 		concurrency := rand.Intn(10) + 1
 
 		var mux sync.Mutex // guard writing to result slice
 		var result []int
 		err := rheos.ParForEach(
-			p,
+			producer,
 			concurrency,
 			func(_ context.Context, v int) error {
 				mux.Lock()
@@ -212,14 +212,14 @@ func TestUnitParForEach(t *testing.T) {
 		num := int(rand.Int31n(100) + 10)
 
 		ctx, cancel := context.WithCancel(context.Background())
-		p := newProducer(ctx, num)
+		producer := newProducer(ctx, num)
 
 		concurrency := rand.Intn(10) + 1
 
 		var mux sync.Mutex // guard writing to result slice
 		var result []int
 		err := rheos.ParForEach(
-			p,
+			producer,
 			concurrency,
 			func(_ context.Context, v int) error {
 				mux.Lock()
@@ -239,3 +239,4 @@ func TestUnitParForEach(t *testing.T) {
 		}
 	})
 }
+:want
