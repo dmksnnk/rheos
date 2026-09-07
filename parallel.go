@@ -21,21 +21,28 @@ func ParFilterMap[I any, O any](pipe Stream[I], num int, callback func(context.C
 
 		for i := 0; i < num; i++ {
 			eg.Go(func() error {
-				for elem := range pipe.in {
-					mapped, ok, err := callback(ctx, elem)
-					if err != nil {
-						return err
-					}
-					if !ok {
-						continue
-					}
+				for {
+					select {
+					case <-ctx.Done():
+						return nil
+					case elem, open := <-pipe.in:
+						if !open {
+							return nil
+						}
 
-					if err := push(ctx, output, mapped); err != nil {
-						return err
+						mapped, ok, err := callback(ctx, elem)
+						if err != nil {
+							return err
+						}
+						if !ok {
+							continue
+						}
+
+						if pushed := push(ctx, output, mapped); !pushed {
+							return nil
+						}
 					}
 				}
-
-				return nil
 			})
 		}
 
@@ -86,13 +93,20 @@ func ParFilter[I any](pipe Stream[I], num int, callback func(context.Context, I)
 func ParForEach[I any](pipe Stream[I], num int, callback func(context.Context, I) error) error {
 	for i := 0; i < num; i++ {
 		pipe.eg.Go(func() error {
-			for elem := range pipe.in {
-				if err := callback(pipe.ctx, elem); err != nil {
-					return err
+			for {
+				select {
+				case <-pipe.ctx.Done():
+					return pipe.ctx.Err()
+				case elem, ok := <-pipe.in:
+					if !ok {
+						return pipe.ctx.Err()
+					}
+
+					if err := callback(pipe.ctx, elem); err != nil {
+						return err
+					}
 				}
 			}
-
-			return nil
 		})
 	}
 

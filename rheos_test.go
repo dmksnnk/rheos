@@ -287,7 +287,7 @@ func TestUnitFromChannel(t *testing.T) {
 		p := rheos.FromChannel(ctx, input)
 		_, err := rheos.Collect(p)
 		if !errors.Is(err, context.Canceled) {
-			t.Errorf("unexpected error: %v, want: %v", err, context.Canceled)
+			t.Errorf("unexpected error: %s, want: %s", err, context.Canceled)
 		}
 	})
 }
