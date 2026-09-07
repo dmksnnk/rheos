@@ -105,44 +105,14 @@ func FromChannel[I any](ctx context.Context, input <-chan I, ops ...Option[I]) S
 // Map transforms Stream into a Stream of another type.
 // If error occurs or context is cancelled during processing, Map stops processing and returns error.
 func Map[I any, O any](pipe Stream[I], mapper func(context.Context, I) (O, error), ops ...Option[O]) Stream[O] {
-	output := make(chan O)
-	for _, op := range ops {
-		output = op()
-	}
-
-	pipe.eg.Go(func() error {
-		defer close(output)
-
-		for {
-			select {
-			case <-pipe.ctx.Done():
-				return nil
-			case elem, ok := <-pipe.in:
-				if !ok {
-					return nil
-				}
-
-				mapped, err := mapper(pipe.ctx, elem)
-				if err != nil {
-					return err
-				}
-
-				if pushed := push(pipe.ctx, output, mapped); !pushed {
-					return nil
-				}
-			}
-		}
+	return FilterMap(pipe, func(ctx context.Context, elem I) (O, bool, error) {
+		mapped, err := mapper(ctx, elem)
+		return mapped, true, err
 	})
-
-	return Stream[O]{
-		in:  output,
-		eg:  pipe.eg,
-		ctx: pipe.ctx,
-	}
 }
 
 // Filter returns a Stream which obtained after filtering using given callback function.
-// The callback function should return  whether the element should be included or not.
+// The callback function should return whether the element should be included or not.
 // If error occurs or context is cancelled during processing, Filter stops processing and returns error.
 func Filter[I any](pipe Stream[I], callback func(context.Context, I) (bool, error), ops ...Option[I]) Stream[I] {
 	return FilterMap[I, I](
