@@ -33,17 +33,15 @@ func FromIter[I any](ctx context.Context, iter Iter[I], ops ...Option[I]) Stream
 	eg.Go(func() error {
 		defer close(results)
 
-		var err error
 		pushFn := func(elem I) bool {
-			err = push(ctx, results, elem)
-			return err == nil
+			return push(ctx, results, elem)
 		}
 
 		if err := iter(pushFn); err != nil {
 			return err
 		}
 
-		return err
+		return nil
 	})
 
 	return Stream[I]{
@@ -81,13 +79,20 @@ func FromChannel[I any](ctx context.Context, input <-chan I, ops ...Option[I]) S
 	eg.Go(func() error {
 		defer close(results)
 
-		for elem := range input {
-			if err := push(ctx, results, elem); err != nil {
-				return err
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case elem, ok := <-input:
+				if !ok {
+					return nil
+				}
+
+				if pushed := push(ctx, results, elem); !pushed {
+					return nil
+				}
 			}
 		}
-
-		return nil
 	})
 
 	return Stream[I]{
@@ -100,37 +105,14 @@ func FromChannel[I any](ctx context.Context, input <-chan I, ops ...Option[I]) S
 // Map transforms Stream into a Stream of another type.
 // If error occurs or context is cancelled during processing, Map stops processing and returns error.
 func Map[I any, O any](pipe Stream[I], mapper func(context.Context, I) (O, error), ops ...Option[O]) Stream[O] {
-	output := make(chan O)
-	for _, op := range ops {
-		output = op()
-	}
-
-	pipe.eg.Go(func() error {
-		defer close(output)
-
-		for elem := range pipe.in {
-			mapped, err := mapper(pipe.ctx, elem)
-			if err != nil {
-				return err
-			}
-
-			if err := push(pipe.ctx, output, mapped); err != nil {
-				return err
-			}
-		}
-
-		return nil
+	return FilterMap(pipe, func(ctx context.Context, elem I) (O, bool, error) {
+		mapped, err := mapper(ctx, elem)
+		return mapped, true, err
 	})
-
-	return Stream[O]{
-		in:  output,
-		eg:  pipe.eg,
-		ctx: pipe.ctx,
-	}
 }
 
 // Filter returns a Stream which obtained after filtering using given callback function.
-// The callback function should return  whether the element should be included or not.
+// The callback function should return whether the element should be included or not.
 // If error occurs or context is cancelled during processing, Filter stops processing and returns error.
 func Filter[I any](pipe Stream[I], callback func(context.Context, I) (bool, error), ops ...Option[I]) Stream[I] {
 	return FilterMap[I, I](
@@ -156,21 +138,28 @@ func FilterMap[I any, O any](pipe Stream[I], callback func(context.Context, I) (
 	pipe.eg.Go(func() error {
 		defer close(output)
 
-		for elem := range pipe.in {
-			mapped, ok, err := callback(pipe.ctx, elem)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				continue
-			}
+		for {
+			select {
+			case <-pipe.ctx.Done():
+				return nil
+			case elem, open := <-pipe.in:
+				if !open {
+					return nil
+				}
 
-			if err := push(pipe.ctx, output, mapped); err != nil {
-				return err
+				mapped, ok, err := callback(pipe.ctx, elem)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					continue
+				}
+
+				if pushed := push(pipe.ctx, output, mapped); !pushed {
+					return nil
+				}
 			}
 		}
-
-		return nil
 	})
 
 	return Stream[O]{
@@ -192,22 +181,29 @@ func Batch[I any](pipe Stream[I], size int, ops ...Option[[]I]) Stream[[]I] {
 		defer close(output)
 
 		batch := make([]I, 0, size)
-		for elem := range pipe.in {
-			batch = append(batch, elem)
-			if len(batch) == size {
-				if err := push(pipe.ctx, output, batch); err != nil {
-					return err
+		for {
+			select {
+			case <-pipe.ctx.Done():
+				return nil
+			case elem, ok := <-pipe.in:
+				if !ok {
+					if len(batch) > 0 {
+						push(pipe.ctx, output, batch)
+					}
+
+					return nil
 				}
 
-				batch = make([]I, 0, size)
+				batch = append(batch, elem)
+				if len(batch) == size {
+					if pushed := push(pipe.ctx, output, batch); !pushed {
+						return nil
+					}
+
+					batch = make([]I, 0, size)
+				}
 			}
 		}
-
-		if len(batch) > 0 {
-			return push(pipe.ctx, output, batch)
-		}
-
-		return nil
 	})
 
 	return Stream[[]I]{
@@ -235,6 +231,8 @@ func BatchTimeout[I any](pipe Stream[I], size int, timeout time.Duration, ops ..
 	loop:
 		for {
 			select {
+			case <-pipe.ctx.Done():
+				return nil
 			case d, ok := <-pipe.in:
 				if !ok {
 					break loop
@@ -242,8 +240,8 @@ func BatchTimeout[I any](pipe Stream[I], size int, timeout time.Duration, ops ..
 
 				batch = append(batch, d)
 				if len(batch) == size {
-					if err := push(pipe.ctx, output, batch); err != nil {
-						return err
+					if pushed := push(pipe.ctx, output, batch); !pushed {
+						return nil
 					}
 					batch = make([]I, 0, size)
 				}
@@ -251,15 +249,15 @@ func BatchTimeout[I any](pipe Stream[I], size int, timeout time.Duration, ops ..
 				if len(batch) == 0 {
 					continue
 				}
-				if err := push(pipe.ctx, output, batch); err != nil {
-					return err
+				if pushed := push(pipe.ctx, output, batch); !pushed {
+					return nil
 				}
 				batch = make([]I, 0, size)
 			}
 		}
 
 		if len(batch) > 0 {
-			return push(pipe.ctx, output, batch)
+			push(pipe.ctx, output, batch)
 		}
 
 		return nil
@@ -283,15 +281,22 @@ func UnBatch[I any](pipe Stream[[]I], ops ...Option[I]) Stream[I] {
 	pipe.eg.Go(func() error {
 		defer close(output)
 
-		for batch := range pipe.in {
-			for _, elem := range batch {
-				if err := push(pipe.ctx, output, elem); err != nil {
-					return err
+		for {
+			select {
+			case <-pipe.ctx.Done():
+				return nil
+			case batch, ok := <-pipe.in:
+				if !ok {
+					return nil
+				}
+
+				for _, elem := range batch {
+					if pushed := push(pipe.ctx, output, elem); !pushed {
+						return nil
+					}
 				}
 			}
 		}
-
-		return nil
 	})
 
 	return Stream[I]{
@@ -305,17 +310,20 @@ func UnBatch[I any](pipe Stream[[]I], ops ...Option[I]) Stream[I] {
 // If callback returns error or context is cancelled during processing, ForEach stops and returns error.
 func ForEach[I any](pipe Stream[I], callback func(context.Context, I) error) error {
 	pipe.eg.Go(func() error {
-		for elem := range pipe.in {
-			if pipe.ctx.Err() != nil {
+		for {
+			select {
+			case <-pipe.ctx.Done():
 				return pipe.ctx.Err()
-			}
+			case elem, ok := <-pipe.in:
+				if !ok {
+					return pipe.ctx.Err()
+				}
 
-			if err := callback(pipe.ctx, elem); err != nil {
-				return err
+				if err := callback(pipe.ctx, elem); err != nil {
+					return err
+				}
 			}
 		}
-
-		return nil
 	})
 
 	return pipe.eg.Wait()
@@ -350,11 +358,11 @@ func Collect[I any](p Stream[I]) ([]I, error) {
 	)
 }
 
-func push[T any](ctx context.Context, ch chan<- T, item T) error {
+func push[T any](ctx context.Context, ch chan<- T, item T) bool {
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return false
 	case ch <- item:
-		return nil
+		return true
 	}
 }

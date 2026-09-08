@@ -8,6 +8,7 @@ import (
 	"iter"
 	"maps"
 	"math/rand"
+	"runtime"
 	"slices"
 	"testing"
 
@@ -56,6 +57,32 @@ func TestFromSeq2(t *testing.T) {
 		_, err := rheos.Collect(p2)
 		if !errors.Is(err, context.Canceled) {
 			t.Errorf("unexpected error: %s", err)
+		}
+	})
+
+	t.Run("preserves callback error from cancellation cause", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		producerDone := make(chan struct{})
+		s := rheos.FromSeq2(ctx, func(yield func(int, error) bool) {
+			defer close(producerDone)
+
+			if !yield(1, nil) {
+				return
+			}
+			yield(2, nil)
+		})
+
+		err := rheos.ForEach(s, func(_ context.Context, _ int) error {
+			cancel()
+			<-producerDone
+			runtime.Gosched()
+
+			return errTest
+		})
+		if !errors.Is(err, errTest) {
+			t.Errorf("unexpected error: %s, want: %s", err, errTest)
 		}
 	})
 }

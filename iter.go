@@ -29,8 +29,7 @@ func FromSeq2[I any](ctx context.Context, seq iter.Seq2[I, error], ops ...Option
 				return false
 			}
 
-			err = push(ctx, results, elem)
-			return err == nil
+			return push(ctx, results, elem)
 		})
 
 		return err
@@ -60,14 +59,20 @@ func FromSeq[I any](ctx context.Context, seq iter.Seq[I], ops ...Option[I]) Stre
 // All returns an iterator over value-error pairs.
 func All[I any](pipe Stream[I]) iter.Seq2[I, error] {
 	return func(yield func(I, error) bool) {
-		for elem := range pipe.in {
-			if err := pipe.ctx.Err(); err != nil {
-				yield(elem, err)
+		for {
+			select {
+			case <-pipe.ctx.Done():
+				var zero I
+				yield(zero, pipe.ctx.Err())
 				return
-			}
+			case elem, ok := <-pipe.in:
+				if !ok {
+					return
+				}
 
-			if !yield(elem, nil) {
-				return
+				if !yield(elem, nil) {
+					return
+				}
 			}
 		}
 	}
